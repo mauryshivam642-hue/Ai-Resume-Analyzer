@@ -5,8 +5,8 @@ from parser import ResumeParser
 import json
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "test_resumes"
-OUTPUT_DIR = BASE_DIR / "output"
+UPLOAD_DIR = Path("/tmp/test_resumes")
+OUTPUT_DIR = Path("/tmp/output")
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
