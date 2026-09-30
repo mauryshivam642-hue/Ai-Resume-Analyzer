@@ -28,13 +28,26 @@ def unique_clean(values):
 
 
 def extract_emails(text):
-    return unique_clean(re.findall(EMAIL_PATTERN, text))
+    emails = re.findall(EMAIL_PATTERN, text)
+
+    cleaned_emails = []
+
+    for email in emails:
+        email = re.sub(r"(?i)(email|address)$", "", email)
+        cleaned_emails.append(email)
+
+    return unique_clean(cleaned_emails)
 
 
 def extract_phones(text):
     matches = []
+
     for pattern in PHONE_PATTERNS:
         matches.extend(re.findall(pattern, text))
+
+    merged_phone = re.findall(r"(?<!\d)[6-9]\d{8,9}(?!\d)", text)
+    matches.extend(merged_phone)
+
     return unique_clean(matches)
 
 

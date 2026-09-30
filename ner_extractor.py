@@ -3,15 +3,9 @@ import spacy
 
 
 class NERExtractor:
-    """Resume NER with header-first candidate-name detection."""
 
     def __init__(self, model_name="en_core_web_sm"):
-        try:
-            self.nlp = spacy.load(model_name)
-        except OSError as exc:
-            raise RuntimeError(
-                "spaCy model not found. Run: python -m spacy download en_core_web_sm"
-            ) from exc
+        self.nlp = spacy.load(model_name)
 
     @staticmethod
     def _clean_line(line):
@@ -20,11 +14,9 @@ class NERExtractor:
     @staticmethod
     def _is_heading(line):
         headings = {
-            "resume", "cv", "curriculum vitae", "professional summary", "summary",
-            "profile", "objective", "education", "experience", "work experience",
-            "employment", "technical skills", "skills", "projects", "academic projects",
-            "personal projects", "certifications", "certification", "achievements",
-            "contact", "contact information", "references", "interests", "hobbies"
+            "resume", "cv", "profile", "summary", "education",
+            "experience", "skills", "projects", "certifications",
+            "achievements", "contact", "interests", "hobbies"
         }
         return line.lower().strip().rstrip(":") in headings
 
@@ -32,71 +24,71 @@ class NERExtractor:
     def _is_contact_line(line):
         low = line.lower()
         return (
-            "@" in line or "linkedin.com" in low or "github.com" in low
-            or "portfolio" in low or bool(re.search(r"\+?\d[\d\s().-]{8,}\d", line))
+            "@" in line or
+            "linkedin.com" in low or
+            "github.com" in low or
+            bool(re.search(r"\+?\d[\d\s().-]{8,}\d", line))
         )
 
     def _find_header_name(self, text):
-        lines = [self._clean_line(x) for x in text.splitlines()]
-        lines = [x for x in lines if x]
+        match = re.search(
+            r"\b([A-Z]{3,20})\b(?=COMPUTER SCIENCE|COMPUTER|STUDENT)",
+            text
+        )
 
-        header = []
-        for line in lines[:25]:
-            if self._is_heading(line):
-                break
-            header.append(line)
+        if match:
+            return match.group(1).title()
 
-        candidates = [
-            x for x in header
-            if not self._is_contact_line(x) and not self._is_heading(x)
+        lines = [
+            self._clean_line(x)
+            for x in text.splitlines()
+            if x.strip()
         ]
 
         blocked = {
-            "resume", "curriculum", "vitae", "developer", "engineer", "student",
-            "profile", "summary", "generative", "artificial", "intelligence",
-            "machine", "learning", "software", "computer", "science"
+            "resume", "profile", "summary", "student",
+            "developer", "engineer", "computer", "science",
+            "skills", "languages"
         }
 
-        # 1. Strongest signal: standalone uppercase human-name-like line.
-        for line in candidates:
-            words = re.findall(r"[A-Za-z][A-Za-z.'-]*", line)
-            if 2 <= len(words) <= 5 and line == line.upper():
-                if not any(w.lower() in blocked for w in words):
-                    return line.title()
+        for line in lines[:25]:
+            if self._is_heading(line) or self._is_contact_line(line):
+                continue
 
-        # 2. Title-case short line in the header.
-        for line in candidates:
             words = re.findall(r"[A-Za-z][A-Za-z.'-]*", line)
-            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words if w):
+
+            if len(words) == 1 and words[0].isupper():
+                if words[0].lower() not in blocked:
+                    return words[0].title()
+
+            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
                 if not any(w.lower() in blocked for w in words):
                     return line
-
-        # 3. spaCy PERSON only as a fallback, restricted to the header.
-        doc = self.nlp("\n".join(header[:15]))
-        for ent in doc.ents:
-            if ent.label_ == "PERSON":
-                candidate = self._clean_line(ent.text)
-                words = candidate.split()
-                if 2 <= len(words) <= 4 and not any(w.lower() in blocked for w in words):
-                    return candidate
 
         return None
 
     def extract(self, text):
         doc = self.nlp(text)
+
         entities = []
         organizations = []
 
         for ent in doc.ents:
             value = ent.text.strip()
+
             if not value:
                 continue
-            entities.append({"text": value, "label": ent.label_})
+
+            entities.append({
+                "text": value,
+                "label": ent.label_
+            })
+
             if ent.label_ in {"ORG", "GPE", "FAC"}:
                 organizations.append(value)
 
         return {
             "name": self._find_header_name(text),
             "entities": entities,
-            "organizations": list(dict.fromkeys(organizations)),
+            "organizations": list(dict.fromkeys(organizations))
         }
